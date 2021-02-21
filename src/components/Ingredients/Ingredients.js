@@ -1,16 +1,25 @@
-import React, {useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useReducer, useState, useMemo} from 'react';
 
 import IngredientForm from './IngredientForm';
 import Search from './Search';
 import IngredientList from './IngredientList';
 import LoadingIndicator from '../UI/LoadingIndicator';
 import ErrorModal from '../UI/ErrorModal';
+import ingredientReducer from '../../store/reducers/ingredient';
+import httpReducer from '../../store/reducers/http';
+import * as ingredientActions from '../../store/actions/ingredient';
+import useHttp from '../../hooks/http';
 
 const Ingredients = () => {
   const [ingredients, setIngredients] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
+  const [ings, dispatch] = useReducer(ingredientReducer, []);
+  // const [loading, setLoading] = useState(false);
+  // const [error, setError] = useState(null);
+  // const [http, httpDispatch] = useReducer(httpReducer, {
+  //   loading: false,
+  //   error: null
+  // })
+  const { isLoading, data, error, sendRequest } = useHttp();
   useEffect(() => {
     fetch('https://react-hooks-5ffb0-default-rtdb.firebaseio.com/ingredients.json', {
       method: 'GET'
@@ -23,40 +32,37 @@ const Ingredients = () => {
         };
         ings.push(ing);
       }
-      setIngredients(ings);
+      dispatch(ingredientActions.setIngredients(ings));
     })
-  }, [setIngredients])
-  const addIngredientsHandler = ingredient => {
-
-    setLoading(true);
-    fetch('https://react-hooks-5ffb0-default-rtdb.firebaseio.com/ingredients.json', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(ingredient)
-    }).then(resp => {
-      return resp.json();
-    }).then(resp => {
-      console.log(resp);
-      setIngredients(prevIngredients => [...prevIngredients, {id: resp.name, ...ingredient}]);
-      setLoading(false);
-    }).catch(err => {
-      setError(err);
-      setLoading(false);
-    });
-  }
-  const modalClosed = () => {
-    setError(null);
-  }
+  }, [])
+  const addIngredientsHandler = useCallback(ingredient => {
+    sendRequest('https://react-hooks-5ffb0-default-rtdb.firebaseio.com/ingredients.json', 'POST', JSON.stringify(ingredient));
+    if (data) {
+      dispatch(ingredientActions.addIngredient({
+        id: data.name,
+        ...ingredient
+      }))
+    }
+  }, [sendRequest, data]);
+  const modalClosed = useCallback(() => {
+    // httpDispatch({type: 'CLEAR'});
+  });
   const removeItem = (id) => {
-    setIngredients(ingredients.filter((v) => v.id !== id));
+    // setIngredients(ingredients.filter((v) => v.id !== id));
+    dispatch(ingredientActions.deleteIngredient(id));
   }
+  const ingredientList = useMemo(() => {
+    return (
+      <IngredientList ingredients={ings} onRemoveItem={removeItem} />
+    );
+  }, [ings, removeItem]);
   return (
     <div className="App" style={{textAlign: 'center'}}>
       {error ? <ErrorModal onClose={modalClosed}>Error!</ErrorModal> : null}
-      {loading ? <LoadingIndicator /> : <IngredientForm onAddIngredient={addIngredientsHandler} />}
+      {isLoading ? <LoadingIndicator /> : <IngredientForm onAddIngredient={addIngredientsHandler} />}
       <section>
         <Search onSetIngredients={setIngredients}/>
-        <IngredientList ingredients={ingredients} onRemoveItem={removeItem} />
+        { ingredientList }
       </section>
     </div>
   );
